@@ -1,0 +1,31 @@
+name: Check protected King release
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 tools/security_check.py
+      - run: bash tools/ci_security.sh
+  loader:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Official Luau tools
+        run: |
+          mkdir -p .cache/luau
+          curl --fail --location --silent --show-error https://github.com/luau-lang/luau/releases/download/0.742/luau-ubuntu.zip -o .cache/luau.zip
+          echo '152058b98c60ff1f5b5ec9bca0b8eb37793cae161dd3a05608cc3d8738ba1a4d  .cache/luau.zip' | sha256sum --check --status
+          unzip -q .cache/luau.zip -d .cache/luau
+          chmod +x .cache/luau/luau .cache/luau/luau-compile
+      - run: python3 tools/test.py --luau .cache/luau/luau --compiler .cache/luau/luau-compile

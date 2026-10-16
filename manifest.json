@@ -1,0 +1,22 @@
+{
+  "format": 1,
+  "obfuscator": "King",
+  "version": "0.6.0",
+  "artifacts": {
+    "loader.luau": {
+      "sha256": "c0f3f16f3a4bbea60193d1b9b66d6f3c9ed80b9c8f625c51f5515397a70d7df1",
+      "profile": "vm",
+      "runtime_keyed": false
+    },
+    "Booga Booga Reborn/init.luau": {
+      "sha256": "ec88451a8e292d3580c4b915e88bd4e917b25d713771bc324a5147f0e15ae58f",
+      "profile": "vm",
+      "runtime_keyed": false
+    },
+    "Booga Booga Reborn/King.protected.luau": {
+      "sha256": "f4e7ebc0def2504b84fa0217b0cd363377b7871731c423b0d801d51a46c20a4f",
+      "profile": "hybrid",
+      "runtime_keyed": true
+    }
+  }
+}

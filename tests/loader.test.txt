@@ -1,0 +1,88 @@
+local actualLoadstring = loadstring
+local state = {}
+local calls = {}
+local failDownload, badCompile, badModule = false, false, false
+local gate
+local currentLibrary
+local fixture = { Endpoint = "https://private.example", Remember = true }
+local env = setmetatable({}, { __index = getfenv() })
+local destroyed = 0
+local function library(version)
+    return {
+        Version = version,
+        CreateWindow = function() end,
+        CreateKeySystem = function(self, options)
+            assert(options.Name == "King" and options.Application == "king")
+            assert(options.Endpoint == fixture.Endpoint and options.CachePath == "King/auth.json")
+            assert(options.Remember == fixture.Remember)
+            gate = { Library = self, Options = options }
+            return gate
+        end,
+    }
+end
+env.game = {
+    GameId = 4154513353,
+    GetService = function(_, name)
+        assert(name == "HttpService")
+        return { JSONDecode = function(_, value) assert(value == "private-fixture"); return fixture end }
+    end,
+    HttpGet = function(_, url, fresh)
+        assert(fresh == true, "Every library and game request must bypass the executor cache")
+        table.insert(calls, url)
+        if failDownload then error("private internal failure should not leak") end
+        if badCompile then return "invalid lua !" end
+        if url == "https://github.com/Proxo123/Kinoue-Lib/releases/latest/download/Kinoue.lua" then
+            return "return currentLibrary"
+        end
+        assert(url == "https://raw.githubusercontent.com/Proxo123/King/main/Booga%20Booga%20Reborn/init.luau")
+        return badModule and "return false" or GAME_SOURCE
+    end,
+}
+env.getgenv = function() return state end
+env.readfile = function(path) assert(path == "King/private.json"); return "private-fixture" end
+env.loadstring = function(source, name)
+    local chunk, message = actualLoadstring(source, name)
+    if chunk then setfenv(chunk, env) end
+    return chunk, message
+end
+local root = assert(actualLoadstring(ROOT_SOURCE, "KingLoaderTest"))
+setfenv(root, env)
+env.currentLibrary = library("0.10.3")
+state.King = { Destroy = function() destroyed += 1 end }
+state.KingKeySystem = { Destroy = function() destroyed += 1 end }
+assert(root(fixture) == gate and gate.Library == env.currentLibrary and state.KingKeySystem == gate)
+assert(destroyed == 2 and #calls == 2)
+env.currentLibrary = library("0.10.4")
+assert(root() == gate and gate.Library.Version == "0.10.4" and #calls == 4, "Each execution must fetch the new release")
+fixture.Remember = false
+assert(root(fixture).Options.Remember == false)
+local before = #calls
+for _, invalid in ipairs({ {}, { Endpoint = "http://private.example" }, { Endpoint = "https://private.example?token=fixture" }, { Endpoint = "https://user:password@private.example" }, { Endpoint = "https://private.example", Password = "fixture" }, { Endpoint = "https://private.example", Remember = "yes" } }) do
+    assert(not pcall(root, invalid))
+end
+assert(#calls == before, "Invalid configuration must not issue requests")
+env.game.GameId = 0
+assert(not pcall(root, fixture) and #calls == before)
+env.game.GameId = 4154513353
+state.King = { Destroy = function() destroyed += 1 end }
+local oldDestroyed = destroyed
+failDownload = true
+local ok, message = pcall(root, fixture)
+assert(not ok and not tostring(message):find("private internal failure", 1, true))
+assert(destroyed == oldDestroyed, "Failed downloads must preserve the running instance")
+failDownload, badCompile = false, true
+assert(not pcall(root, fixture) and destroyed == oldDestroyed)
+badCompile, badModule = false, true
+assert(not pcall(root, fixture) and destroyed == oldDestroyed)
+badModule = false
+for _, version in ipairs({ "0.10.2", "0.9.9", "unknown" }) do
+    env.currentLibrary = library(version)
+    assert(not pcall(root, fixture) and destroyed == oldDestroyed)
+end
+env.currentLibrary = library("1.0.0")
+assert(root(fixture) == gate and gate.Library.Version == "1.0.0")
+env.readfile = function() error("sensitive local error") end
+before = #calls
+ok, message = pcall(root)
+assert(not ok and #calls == before and not tostring(message):find("sensitive local error", 1, true))
+print("PASS: private configuration, newest release each execution, shared library instance, game routing, auth options, controlled replacement, sanitized failures, no stale fallback")
